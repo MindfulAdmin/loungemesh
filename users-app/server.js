@@ -39,7 +39,12 @@ if (!SESSION_SECRET || BAD_SECRETS.has(SESSION_SECRET) || SESSION_SECRET.length 
 }
 const PROSODY_CONTAINER = process.env.PROSODY_CONTAINER || 'loungemesh-prosody-1';
 const PROSODY_DOMAIN = process.env.PROSODY_DOMAIN || 'meet.jitsi';
-const PROSODY_CONFIG = process.env.PROSODY_CONFIG || '/config/prosody.cfg.lua';
+// Rootless Jitsi (stable-11146+): Prosody runs as uid 1000 (s6) with runtime
+// config under /run/prosody/config and data_path /var/lib/prosody/data.
+const PROSODY_CONFIG =
+  process.env.PROSODY_CONFIG || '/run/prosody/config/prosody.cfg.lua';
+const PROSODY_USER = process.env.PROSODY_USER || 's6';
+const PROSODY_DATA_DIR = process.env.PROSODY_DATA_DIR || '/var/lib/prosody/data';
 const PROSODY_SYSTEM_USERS = new Set(
   (process.env.PROSODY_SYSTEM_USERS || 'focus,jibri,jigasi,jvb,recorder,office')
     .split(',')
@@ -223,11 +228,36 @@ function requireAuth(req, res, next) {
 
 function prosodyAccountsDir() {
   const encoded = PROSODY_DOMAIN.replace(/\./g, '%2e');
-  return `/config/data/${encoded}/accounts`;
+  return `${PROSODY_DATA_DIR.replace(/\/$/, '')}/${encoded}/accounts`;
 }
 
-async function dockerExec(args, { env } = {}) {
+function prosodyAccountRolesDir() {
+  const encoded = PROSODY_DOMAIN.replace(/\./g, '%2e');
+  return `${PROSODY_DATA_DIR.replace(/\/$/, '')}/${encoded}/account_roles`;
+}
+
+/** Prosody flat-file storage encodes '.' in localparts as %2e in filenames. */
+function decodeProsodyLocalpart(filenameStem) {
+  try {
+    return decodeURIComponent(String(filenameStem || '')).toLowerCase();
+  } catch {
+    return String(filenameStem || '').toLowerCase();
+  }
+}
+
+function encodeProsodyFilename(localpart) {
+  // Match Prosody internal encoding for '.' only (common case).
+  return String(localpart || '')
+    .toLowerCase()
+    .replace(/\./g, '%2e');
+}
+
+async function dockerExec(args, { env, user } = {}) {
   const full = ['exec'];
+  const runAs = user || PROSODY_USER;
+  if (runAs) {
+    full.push('-u', String(runAs));
+  }
   if (env && typeof env === 'object') {
     for (const [k, v] of Object.entries(env)) {
       full.push('-e', `${k}=${v}`);
@@ -281,9 +311,13 @@ async function prosodyctl(args) {
 async function prosodyUserExists(username) {
   const user = assertSafeMeetUser(username);
   if (!user) return false;
-  const filePath = `${prosodyAccountsDir()}/${user}.dat`;
-  const result = await dockerExec(['test', '-f', filePath]);
-  return result.ok;
+  const candidates = [`${user}.dat`, `${encodeProsodyFilename(user)}.dat`];
+  for (const name of candidates) {
+    const filePath = `${prosodyAccountsDir()}/${name}`;
+    const result = await dockerExec(['test', '-f', filePath]);
+    if (result.ok) return true;
+  }
+  return false;
 }
 
 async function listProsodyUsers() {
@@ -299,7 +333,7 @@ async function listProsodyUsers() {
     .split('\n')
     .map((l) => l.trim())
     .filter((l) => l.endsWith('.dat'))
-    .map((l) => l.replace(/\.dat$/i, '').toLowerCase())
+    .map((l) => decodeProsodyLocalpart(l.replace(/\.dat$/i, '')))
     .filter((u) => u && !PROSODY_SYSTEM_USERS.has(u));
 }
 
@@ -360,6 +394,22 @@ async function prosodySetPassword(username, password) {
   return { ok: true };
 }
 
+async function unlinkProsodyAccountFiles(username) {
+  const user = assertSafeMeetUser(username);
+  if (!user) return;
+  const stems = new Set([user, encodeProsodyFilename(user)]);
+  // Also accept raw encoded form if UI still shows %2e
+  const raw = String(username || '').trim().toLowerCase();
+  if (raw) stems.add(raw.replace(/\.dat$/i, ''));
+  for (const stem of stems) {
+    if (!stem || stem.includes('/') || stem.includes('..')) continue;
+    const acc = `${prosodyAccountsDir()}/${stem}.dat`;
+    const role = `${prosodyAccountRolesDir()}/${stem}.dat`;
+    await dockerExec(['rm', '-f', acc]);
+    await dockerExec(['rm', '-f', role]);
+  }
+}
+
 async function prosodyDeleteUser(username) {
   const user = assertSafeMeetUser(username);
   if (!user) return { ok: false, error: 'invalid_meet_username' };
@@ -368,12 +418,20 @@ async function prosodyDeleteUser(username) {
   }
   const jid = `${user}@${PROSODY_DOMAIN}`;
   const result = await prosodyctl(['deluser', jid]);
-  if (!result.ok) {
-    const msg = (result.stderr || result.stdout || '').trim();
-    if (/does not exist|not found|no such/i.test(msg)) return { ok: true };
-    return { ok: false, error: msg || 'prosody_delete_failed' };
+  const msg = (result.stderr || result.stdout || '').trim();
+  const gone = /does not exist|not found|no such/i.test(msg);
+  if (result.ok || gone) {
+    await unlinkProsodyAccountFiles(user);
+    return { ok: true };
   }
-  return { ok: true };
+  // Flat-file orphan (listed from disk but unknown to prosodyctl): remove files.
+  const exists = await prosodyUserExists(user);
+  if (!exists) {
+    await unlinkProsodyAccountFiles(username);
+    await unlinkProsodyAccountFiles(user);
+    return { ok: true };
+  }
+  return { ok: false, error: msg || 'prosody_delete_failed' };
 }
 
 
@@ -754,7 +812,11 @@ router.post('/api/users/delete', requireAuth, async (req, res) => {
       return res.status(409).json({ error: results.office.error, results });
     }
     if (results.meet && !results.meet.ok) {
-      return res.status(500).json({ error: 'meet_delete_failed', results });
+      return res.status(500).json({
+        error: 'meet_delete_failed',
+        detail: results.meet.error || null,
+        results,
+      });
     }
     res.json({ ok: true, results });
   } catch (err) {

@@ -75,7 +75,7 @@ function generatePassword(len = 16) {
 function setBusy(btn, busy, labelBusy) {
   if (!btn) return;
   if (busy) {
-    if (!btn.dataset.label) btn.dataset.label = btn.textContent;
+    if (!btn.dataset.label) btn.dataset.label = (btn.textContent || '').trim() || 'Delete';
     btn.disabled = true;
     btn.classList.add('is-busy');
     btn.setAttribute('aria-busy', 'true');
@@ -84,7 +84,7 @@ function setBusy(btn, busy, labelBusy) {
     btn.disabled = false;
     btn.classList.remove('is-busy');
     btn.removeAttribute('aria-busy');
-    btn.textContent = btn.dataset.label || btn.textContent;
+    btn.textContent = btn.dataset.label || 'Delete';
   }
 }
 
@@ -423,10 +423,18 @@ async function renderUsers(root) {
           });
           await renderUsers(root);
         } catch (err) {
+          const detail = err.payload?.detail || err.payload?.results?.meet?.error || '';
+          let msg = err.message || 'Delete failed';
+          if (err.message === 'user_has_meetings') {
+            msg = 'Cannot delete: this Office user still hosts meetings.';
+          } else if (err.message === 'meet_delete_failed') {
+            msg = detail
+              ? `Meet delete failed: ${detail}`
+              : 'Meet delete failed. Prosody may be unreachable — check users-ui logs.';
+          }
+          alert(msg);
+        } finally {
           setBusy(btn, false);
-          alert(err.message === 'user_has_meetings'
-            ? 'Cannot delete: this Office user still hosts meetings.'
-            : err.message || 'Delete failed');
         }
       });
       list.appendChild(row);

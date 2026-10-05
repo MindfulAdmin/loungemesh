@@ -62,7 +62,9 @@ services:
       PGPASSWORD: ${POSTGRES_PASSWORD}
       PROSODY_CONTAINER: loungemesh-prosody-1
       PROSODY_DOMAIN: meet.jitsi
-      PROSODY_CONFIG: /config/prosody.cfg.lua
+      PROSODY_CONFIG: /run/prosody/config/prosody.cfg.lua
+      PROSODY_USER: s6
+      PROSODY_DATA_DIR: /var/lib/prosody/data
       # Talk to allowlisted proxy instead of host docker.sock
       DOCKER_HOST: tcp://users-docker-proxy:2375
       # Required — app exits if unset or a known default.
