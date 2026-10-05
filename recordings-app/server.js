@@ -5,6 +5,9 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import crypto from 'crypto';
+import { execFile } from 'child_process';
+import { promisify } from 'util';
+const execFileAsync = promisify(execFile);
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT || 8088);
@@ -165,9 +168,64 @@ function isSafeSegment(name) {
   );
 }
 
-function listRecordings() {
+
+function durationFromMeta(meta) {
+  if (!meta || typeof meta !== 'object') return null;
+  const v = meta.durationSeconds ?? meta.duration_seconds ?? meta.duration;
+  if (v == null || v === '') return null;
+  const n = typeof v === 'number' ? v : Number.parseFloat(String(v));
+  return Number.isFinite(n) && n >= 0 ? Math.round(n) : null;
+}
+
+function writeMetadata(metaPath, meta) {
+  const tmp = `${metaPath}.${process.pid}.${Date.now()}.tmp`;
+  fs.writeFileSync(tmp, JSON.stringify(meta, null, 2), { encoding: 'utf8' });
+  fs.renameSync(tmp, metaPath);
+}
+
+async function probeDurationSeconds(mp4Path) {
+  try {
+    const { stdout } = await execFileAsync(
+      'ffprobe',
+      ['-v', 'error', '-show_entries', 'format=duration', '-of', 'default=noprint_wrappers=1:nokey=1', mp4Path],
+      { timeout: 20000, maxBuffer: 1024 * 1024 }
+    );
+    const n = Number.parseFloat(String(stdout).trim());
+    if (!Number.isFinite(n) || n < 0) return null;
+    return Math.round(n);
+  } catch {
+    return null;
+  }
+}
+
+async function ensureDurationSeconds(meta, metaPath, mp4Path) {
+  const existing = durationFromMeta(meta);
+  if (existing != null) {
+    if (meta.durationSeconds !== existing) {
+      meta.durationSeconds = existing;
+      try {
+        writeMetadata(metaPath, meta);
+      } catch {
+        /* ignore cache write failures */
+      }
+    }
+    return existing;
+  }
+  const probed = await probeDurationSeconds(mp4Path);
+  if (probed == null) return null;
+  meta.durationSeconds = probed;
+  try {
+    writeMetadata(metaPath, meta);
+  } catch {
+    /* ignore */
+  }
+  return probed;
+}
+
+async function listRecordings() {
   if (!fs.existsSync(DATA_DIR)) return [];
   const items = [];
+  const enrich = [];
   for (const entry of fs.readdirSync(DATA_DIR, { withFileTypes: true })) {
     if (!entry.isDirectory()) continue;
     if (entry.name.startsWith('.')) continue; // skip .trash and hidden
@@ -192,7 +250,7 @@ function listRecordings() {
       const title = roomTitle;
       const downloadName = sanitizeFilename(roomTitle, recordedAt);
       const id = `${entry.name}/${file}`;
-      items.push({
+      const item = {
         id,
         folder: entry.name,
         filename: file,
@@ -202,12 +260,20 @@ function listRecordings() {
         downloadName,
         recordedAt: recordedAt.toISOString(),
         size: st.size,
+        durationSeconds: durationFromMeta(meta),
         meetingUrl: meta.meeting_url || null,
         streamUrl: `${BASE}/api/raw/${encodeURIComponent(entry.name)}/${encodeURIComponent(file)}`,
         downloadUrl: `${BASE}/api/raw/${encodeURIComponent(entry.name)}/${encodeURIComponent(file)}?download=1`,
-      });
+      };
+      items.push(item);
+      enrich.push(
+        ensureDurationSeconds(meta, metaPath, full).then((dur) => {
+          item.durationSeconds = dur;
+        })
+      );
     }
   }
+  if (enrich.length) await Promise.all(enrich);
   items.sort((a, b) => new Date(b.recordedAt) - new Date(a.recordedAt));
   return items;
 }
@@ -423,7 +489,7 @@ async function softDeleteRecording(id, req) {
     throw err;
   }
 
-  const items = listRecordings();
+  const items = await listRecordings();
   const recording = items.find((i) => i.id === id);
   if (!recording) {
     const err = new Error('not_found');
@@ -629,8 +695,8 @@ router.get('/api/me', (req, res) => {
   res.json({ user: 'admin', trashTtlDays: Math.round(TRASH_TTL_MS / (24 * 60 * 60 * 1000)) });
 });
 
-router.get('/api/recordings', requireAuth, (_req, res) => {
-  res.json({ items: listRecordings() });
+router.get('/api/recordings', requireAuth, async (_req, res) => {
+  res.json({ items: await listRecordings() });
 });
 
 router.delete('/api/recordings/:folder/:file', requireAuth, async (req, res) => {
@@ -672,7 +738,7 @@ router.post('/api/bin/purge', requireAuth, (req, res) => {
   return res.json({ ok: true, purged, count: purged.length });
 });
 
-router.post('/api/shares', requireAuth, (req, res) => {
+router.post('/api/shares', requireAuth, async (req, res) => {
   const id = String(req.body?.id || '').trim();
   const expiresInDays = Number(req.body?.expiresInDays ?? 30);
   const allowDownload = Boolean(req.body?.allowDownload);
@@ -682,7 +748,7 @@ router.post('/api/shares', requireAuth, (req, res) => {
     return res.status(400).json({ error: 'invalid_expiresInDays' });
   }
 
-  const items = listRecordings();
+  const items = await listRecordings();
   const recording = items.find((i) => i.id === id);
   if (!recording) return res.status(404).json({ error: 'not_found' });
 
@@ -733,11 +799,11 @@ router.delete('/api/shares/:token', requireAuth, (req, res) => {
   return res.status(204).end();
 });
 
-router.get('/api/share/:token', (req, res) => {
+router.get('/api/share/:token', async (req, res) => {
   const share = getActiveShare(req.params.token);
   if (!share) return res.status(404).json({ error: 'not_found' });
 
-  const items = listRecordings();
+  const items = await listRecordings();
   const recording = items.find((i) => i.id === share.id);
   if (!recording) return res.status(404).json({ error: 'not_found' });
 
@@ -747,6 +813,7 @@ router.get('/api/share/:token', (req, res) => {
     roomTitle: recording.roomTitle,
     recordedAt: recording.recordedAt,
     size: recording.size,
+    durationSeconds: recording.durationSeconds,
     streamUrl: `${BASE}/api/share/${share.token}/raw`,
     expiresAt: share.expiresAt,
     allowDownload,
@@ -757,7 +824,7 @@ router.get('/api/share/:token', (req, res) => {
   return res.json(payload);
 });
 
-router.get('/api/share/:token/raw', (req, res) => {
+router.get('/api/share/:token/raw', async (req, res) => {
   const share = getActiveShare(req.params.token);
   if (!share) return res.status(404).json({ error: 'not_found' });
 
@@ -768,7 +835,7 @@ router.get('/api/share/:token/raw', (req, res) => {
   const resolved = resolveRaw(folder, file);
   if (!resolved) return res.status(404).json({ error: 'not_found' });
 
-  const items = listRecordings();
+  const items = await listRecordings();
   const match = items.find((i) => i.folder === resolved.folder && i.filename === resolved.file);
   const downloadName = match?.downloadName || resolved.file;
   const asDownload = Boolean(req.query.download) && Boolean(share.allowDownload);
@@ -779,11 +846,11 @@ router.get('/api/share/:token/raw', (req, res) => {
   return streamMp4(req, res, resolved.full, downloadName, asDownload);
 });
 
-router.get('/api/raw/:folder/:file', requireAuth, (req, res) => {
+router.get('/api/raw/:folder/:file', requireAuth, async (req, res) => {
   const resolved = resolveRaw(req.params.folder, req.params.file);
   if (!resolved) return res.status(404).json({ error: 'not_found' });
 
-  const items = listRecordings();
+  const items = await listRecordings();
   const match = items.find((i) => i.folder === resolved.folder && i.filename === resolved.file);
   const downloadName = match?.downloadName || resolved.file;
   return streamMp4(req, res, resolved.full, downloadName, Boolean(req.query.download));

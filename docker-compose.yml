@@ -200,6 +200,8 @@ services:
     volumes:
       - ${CONFIG:-./docker/jitsi-config}/jibri:/config:Z
       - ${CONFIG:-./docker/jitsi-config}/storage/jibri:/storage:Z
+      # Tracked finalize hook (gitignored path under docker/jitsi-config/ is runtime only)
+      - ./ops/jibri/finalize_recording.sh:/config/finalize_recording.sh:ro
     shm_size: '2gb'
     environment:
       - DISPLAY=:0

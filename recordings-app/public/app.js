@@ -16,6 +16,26 @@ function formatBytes(n) {
   return `${v.toFixed(i === 0 ? 0 : 1)} ${u[i]}`;
 }
 
+function formatDuration(seconds) {
+  const s = Number(seconds);
+  if (!Number.isFinite(s) || s < 0) return '';
+  const total = Math.round(s);
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const sec = total % 60;
+  if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
+  return `${m}:${String(sec).padStart(2, '0')}`;
+}
+
+function sizeDurationLine(item) {
+  const parts = [];
+  const dur = formatDuration(item.durationSeconds);
+  if (dur) parts.push(dur);
+  const sz = formatBytes(item.size);
+  if (sz) parts.push(sz);
+  return parts.join(' · ');
+}
+
 function applyTheme(mode) {
   const next = mode || localStorage.getItem('mr-theme') || 'auto';
   document.documentElement.dataset.theme = next;
@@ -161,7 +181,18 @@ function renderLogin(root, { error } = {}) {
   });
 }
 
-function shell(content, { title, publicMode } = {}) {
+function normalizeHash(hash) {
+  const h = (hash || '#/').split('?')[0];
+  if (h === '#bin' || h === '#/bin' || h.startsWith('#/bin/') || h.startsWith('#bin/')) return 'bin';
+  if (h.startsWith('#/watch') || h.startsWith('#watch')) return 'watch';
+  if (h.startsWith('#/login') || h.startsWith('#login')) return 'login';
+  return 'library';
+}
+
+function shell(content, { title, publicMode, activeNav } = {}) {
+  const nav = activeNav || normalizeHash(location.hash);
+  const binCls = !publicMode && nav === 'bin' ? ' is-active' : '';
+  const libCls = !publicMode && nav === 'library' ? ' is-active' : '';
   return `
     <div class="shell ${publicMode ? 'shell-public' : ''}">
       <header class="topbar">
@@ -175,8 +206,8 @@ function shell(content, { title, publicMode } = {}) {
           ${
             publicMode
               ? ''
-              : `<a class="btn btn-ghost" href="#/bin" id="bin-nav">Bin</a>
-          <a class="btn btn-ghost" href="#/" id="lib-nav">Library</a>`
+              : `<a class="btn btn-ghost${binCls}" href="#/bin" id="bin-nav">Bin</a>
+          <a class="btn btn-ghost${libCls}" href="#/" id="lib-nav">Library</a>`
           }
           <button type="button" class="icon-btn" id="theme-btn" title="Toggle theme">${themeLabel()}</button>
           ${publicMode ? '' : '<button type="button" class="btn btn-ghost" id="logout-btn">Log out</button>'}
@@ -187,17 +218,17 @@ function shell(content, { title, publicMode } = {}) {
   `;
 }
 
-function bindChrome(root, { publicMode } = {}) {
+
+function bindChrome(root, { publicMode, activeNav } = {}) {
   $('#theme-btn', root)?.addEventListener('click', () => {
     cycleTheme();
     $('#theme-btn', root).textContent = themeLabel();
     syncLogos(root);
   });
   if (!publicMode) {
-    const hash = location.hash || '#/';
-    const onBin = hash.startsWith('#/bin');
-    $('#bin-nav', root)?.classList.toggle('is-active', onBin);
-    $('#lib-nav', root)?.classList.toggle('is-active', !onBin && !hash.startsWith('#/watch'));
+    const nav = activeNav || normalizeHash(location.hash);
+    $('#bin-nav', root)?.classList.toggle('is-active', nav === 'bin');
+    $('#lib-nav', root)?.classList.toggle('is-active', nav === 'library');
     $('#logout-btn', root)?.addEventListener('click', async () => {
       await api('/api/logout', { method: 'POST' });
       location.hash = '#/login';
@@ -218,8 +249,8 @@ async function renderLibrary(root) {
     </div>
     <div class="grid" id="grid"></div>
     <div class="empty hidden" id="empty">No recordings match your search.</div>
-  `);
-  bindChrome(root);
+  `, { activeNav: 'library' });
+  bindChrome(root, { activeNav: 'library' });
 
   const grid = $('#grid', root);
   const empty = $('#empty', root);
@@ -252,7 +283,7 @@ async function renderLibrary(root) {
           </div>
         </div>
         <h2>${escapeHtml(recordingLabel(item))}</h2>
-        <div class="sub">${escapeHtml(formatBytes(item.size))}</div>
+        <div class="sub">${escapeHtml(sizeDurationLine(item))}</div>
       `;
       const open = () => {
         location.hash = `#/watch/${encodeURIComponent(item.id)}`;
@@ -456,8 +487,8 @@ async function renderPlayer(root, id) {
   const data = await api('/api/recordings');
   const item = (data.items || []).find((i) => i.id === id);
   if (!item) {
-    root.innerHTML = shell(`<div class="empty">Recording not found.</div>`);
-    bindChrome(root);
+    root.innerHTML = shell(`<div class="empty">Recording not found.</div>`, { activeNav: 'watch' });
+    bindChrome(root, { activeNav: 'watch' });
     return;
   }
   root.innerHTML = shell(
@@ -469,7 +500,7 @@ async function renderPlayer(root, id) {
       <video controls playsinline preload="metadata" src="${item.streamUrl}"></video>
       <div class="player-meta">
         <h1>${escapeHtml(recordingLabel(item))}</h1>
-        <div class="sub">${escapeHtml(item.roomTitle)} · ${formatBytes(item.size)}</div>
+        <div class="sub">${escapeHtml([item.roomTitle, formatDuration(item.durationSeconds), formatBytes(item.size)].filter(Boolean).join(' · '))}</div>
         <div class="player-actions">
           <a class="btn" href="${item.downloadUrl}" download>Download</a>
           <button type="button" class="btn" id="share-btn">Share</button>
@@ -478,11 +509,11 @@ async function renderPlayer(root, id) {
       </div>
     </div>
   `,
-    { title: 'Mindful Recordings' }
+    { title: 'Mindful Recordings', activeNav: 'watch' }
   );
-  bindChrome(root);
+  bindChrome(root, { activeNav: 'watch' });
   $('#back-btn', root).addEventListener('click', () => {
-    location.hash = '#/';
+    navigateTo('#/');
   });
   $('#share-btn', root).addEventListener('click', () => {
     openSharePanel(root, item);
@@ -493,8 +524,7 @@ async function renderPlayer(root, id) {
     if (!ok) return;
     try {
       await deleteRecording(item);
-      location.hash = '#/bin';
-      await route();
+      await navigateTo('#/bin');
     } catch (err) {
       alert(err.message === 'jibri_busy' ? 'Cannot delete while recording is in progress.' : err.message || 'Delete failed');
     }
@@ -516,6 +546,7 @@ function confirmDelete(item) {
         <dl class="confirm-meta">
           <div><dt>Room</dt><dd>${escapeHtml(item.roomTitle || item.room || '')}</dd></div>
           <div><dt>Recorded</dt><dd>${escapeHtml(formatLocalDateTime(item.recordedAt))}</dd></div>
+          ${item.durationSeconds != null ? `<div><dt>Length</dt><dd>${escapeHtml(formatDuration(item.durationSeconds))}</dd></div>` : ''}
           <div><dt>Size</dt><dd>${escapeHtml(formatBytes(item.size))}</dd></div>
         </dl>
         <div class="modal-actions">
@@ -554,8 +585,8 @@ async function renderBin(root) {
     </div>
     <div class="bin-list" id="bin-list"></div>
     <div class="empty ${items.length ? 'hidden' : ''}" id="bin-empty">Bin is empty. Deleted recordings stay here for 7 days, then are removed permanently.</div>
-  `, { title: 'Bin' });
-  bindChrome(root);
+  `, { title: 'Bin', activeNav: 'bin' });
+  bindChrome(root, { activeNav: 'bin' });
   const list = $('#bin-list', root);
   for (const item of items) {
     const el = document.createElement('article');
@@ -572,8 +603,7 @@ async function renderBin(root) {
     el.querySelector('[data-restore]').addEventListener('click', async () => {
       try {
         await api(`/api/bin/${encodeURIComponent(item.trashId)}/restore`, { method: 'POST', body: '{}' });
-        location.hash = '#/';
-        await route();
+        await navigateTo('#/');
       } catch (err) {
         alert(err.message || 'Restore failed');
       }
@@ -643,7 +673,7 @@ async function route() {
       await renderPlayer(root, id);
       return;
     }
-    if (hash.startsWith('#/bin')) {
+    if (normalizeHash(hash) === 'bin') {
       await renderBin(root);
       return;
     }
@@ -659,7 +689,23 @@ async function route() {
   }
 }
 
-window.addEventListener('hashchange', route);
+let routing = false;
+async function navigateTo(hash) {
+  const next = hash.startsWith('#') ? hash : `#${hash}`;
+  if (location.hash === next) {
+    await route();
+    return;
+  }
+  routing = true;
+  location.hash = next;
+  await route();
+  routing = false;
+}
+
+window.addEventListener('hashchange', () => {
+  if (routing) return;
+  route();
+});
 applyTheme();
 window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
   if ((document.documentElement.dataset.theme || 'auto') === 'auto') syncLogos();

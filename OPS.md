@@ -102,8 +102,9 @@ Rebuild after rotating: `docker compose build loungemesh && docker compose up -d
 - App: custom Mindful Recordings (Express) via `recordings-app/docker-compose.recordings.yml` — not File Browser
 - Login: username `admin` — password in `branding/.recordings-password` (+ 1Password). Single admin role; no per-user ownership.
 - Data: `/opt/loungemesh/docker/jitsi-config/storage/jibri/recordings/` (mounted at `/data`)
-- Titles: room name + date/time from Jibri `metadata.json` (Europe/London)
-- Finalize rename: `docker/jitsi-config/jibri/finalize_recording.sh` + `JIBRI_FINALIZE_RECORDING_SCRIPT_PATH`
+- Titles: room name + date/time from Jibri `metadata.json` (filename stamps parsed as UTC; UI shows browser-local time)
+- Duration: `ffprobe` once per MP4, cached as `durationSeconds` in that session’s `metadata.json`
+- Finalize rename: tracked script `ops/jibri/finalize_recording.sh` bind-mounted to `/config/finalize_recording.sh` in the jibri service (`JIBRI_FINALIZE_RECORDING_SCRIPT_PATH=/config/finalize_recording.sh`). Do not rely on the copy under gitignored `docker/jitsi-config/jibri/`.
 - Font: Lato (shared with office/meet branding)
 
 ### Delete / Bin (7-day soft delete)
