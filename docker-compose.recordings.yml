@@ -22,7 +22,7 @@ services:
       FAVICON_FILE: /branding/mindful-favicon.png
       SESSION_SECRET: ${RECORDINGS_SESSION_SECRET}
     volumes:
-      - ./docker/jitsi-config/jibri/recordings:/data
+      - ./docker/jitsi-config/storage/jibri/recordings:/data
       - ./branding/.recordings-password:/run/secrets/recordings-password
       - ./branding/mindful-logo-dark.png:/branding/mindful-logo-dark.png:ro
       - ./branding/mindful-logo-white.png:/branding/mindful-logo-white.png:ro

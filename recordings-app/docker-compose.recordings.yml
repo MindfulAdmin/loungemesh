@@ -22,7 +22,7 @@ services:
       # Required — app exits if unset or a known default.
       SESSION_SECRET: ${RECORDINGS_SESSION_SECRET}
     volumes:
-      - ../docker/jitsi-config/jibri/recordings:/data
+      - ../docker/jitsi-config/storage/jibri/recordings:/data
       # RW so successful login can upgrade plaintext → bcrypt hash in place.
       - ../branding/.recordings-password:/run/secrets/recordings-password
       - ../branding/mindful-logo-dark.png:/branding/mindful-logo-dark.png:ro
