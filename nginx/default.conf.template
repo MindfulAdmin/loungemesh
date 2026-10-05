@@ -52,7 +52,7 @@ server {
     location ~ ^/libs/(?<libs_path>.*)$ {
         resolver 127.0.0.11 valid=30s ipv6=off;
         set $jitsi_web_upstream jitsi-web;
-        proxy_pass http://$jitsi_web_upstream/libs/$libs_path$is_args$args;
+        proxy_pass http://$jitsi_web_upstream:8000/libs/$libs_path$is_args$args;
         proxy_set_header Host $host;
         proxy_http_version 1.1;
         add_header Cache-Control "public, max-age=86400";
