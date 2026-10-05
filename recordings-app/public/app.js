@@ -77,19 +77,33 @@ function escapeHtml(s) {
     .replace(/"/g, '&quot;');
 }
 
-function formatExpiry(iso) {
+/** Browser-local date+time from ISO / Date. One formatter for the whole UI. */
+function formatLocalDateTime(isoOrDate) {
+  if (!isoOrDate) return '';
   try {
-    return new Intl.DateTimeFormat('en-GB', {
+    const d = isoOrDate instanceof Date ? isoOrDate : new Date(isoOrDate);
+    if (Number.isNaN(d.getTime())) return String(isoOrDate);
+    return new Intl.DateTimeFormat(undefined, {
       day: 'numeric',
       month: 'short',
       year: 'numeric',
       hour: '2-digit',
       minute: '2-digit',
       hour12: false,
-    }).format(new Date(iso));
+    }).format(d);
   } catch {
-    return iso || '';
+    return String(isoOrDate);
   }
+}
+
+function formatExpiry(iso) {
+  return formatLocalDateTime(iso);
+}
+
+function recordingLabel(item) {
+  const room = item.roomTitle || item.title || 'Recording';
+  const when = formatLocalDateTime(item.recordedAt);
+  return when ? `${room} · ${when}` : room;
 }
 
 function absoluteShareUrl(tokenOrPath) {
@@ -180,6 +194,10 @@ function bindChrome(root, { publicMode } = {}) {
     syncLogos(root);
   });
   if (!publicMode) {
+    const hash = location.hash || '#/';
+    const onBin = hash.startsWith('#/bin');
+    $('#bin-nav', root)?.classList.toggle('is-active', onBin);
+    $('#lib-nav', root)?.classList.toggle('is-active', !onBin && !hash.startsWith('#/watch'));
     $('#logout-btn', root)?.addEventListener('click', async () => {
       await api('/api/logout', { method: 'POST' });
       location.hash = '#/login';
@@ -233,8 +251,8 @@ async function renderLibrary(root) {
             </div>
           </div>
         </div>
-        <h2>${escapeHtml(item.title)}</h2>
-        <div class="sub">${escapeHtml(item.roomTitle)} · ${formatBytes(item.size)}</div>
+        <h2>${escapeHtml(recordingLabel(item))}</h2>
+        <div class="sub">${escapeHtml(formatBytes(item.size))}</div>
       `;
       const open = () => {
         location.hash = `#/watch/${encodeURIComponent(item.id)}`;
@@ -450,7 +468,7 @@ async function renderPlayer(root, id) {
     <div class="player-wrap">
       <video controls playsinline preload="metadata" src="${item.streamUrl}"></video>
       <div class="player-meta">
-        <h1>${escapeHtml(item.title)}</h1>
+        <h1>${escapeHtml(recordingLabel(item))}</h1>
         <div class="sub">${escapeHtml(item.roomTitle)} · ${formatBytes(item.size)}</div>
         <div class="player-actions">
           <a class="btn" href="${item.downloadUrl}" download>Download</a>
@@ -484,21 +502,6 @@ async function renderPlayer(root, id) {
 }
 
 
-function formatDeletedDate(iso) {
-  try {
-    return new Intl.DateTimeFormat('en-GB', {
-      day: 'numeric',
-      month: 'short',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false,
-    }).format(new Date(iso));
-  } catch {
-    return iso || '';
-  }
-}
-
 function confirmDelete(item) {
   return new Promise((resolve) => {
     const existing = document.getElementById('mr-confirm');
@@ -512,7 +515,7 @@ function confirmDelete(item) {
         <p>This will move the recording to the Bin for <strong>7 days</strong>. Share links will stop working immediately.</p>
         <dl class="confirm-meta">
           <div><dt>Room</dt><dd>${escapeHtml(item.roomTitle || item.room || '')}</dd></div>
-          <div><dt>Date</dt><dd>${escapeHtml(formatDeletedDate(item.recordedAt))}</dd></div>
+          <div><dt>Recorded</dt><dd>${escapeHtml(formatLocalDateTime(item.recordedAt))}</dd></div>
           <div><dt>Size</dt><dd>${escapeHtml(formatBytes(item.size))}</dd></div>
         </dl>
         <div class="modal-actions">
@@ -550,7 +553,7 @@ async function renderBin(root) {
       <div class="meta-count">${items.length} in Bin · auto-purge after ${ttl} days</div>
     </div>
     <div class="bin-list" id="bin-list"></div>
-    <div class="empty ${items.length ? 'hidden' : ''}" id="bin-empty">Bin is empty.</div>
+    <div class="empty ${items.length ? 'hidden' : ''}" id="bin-empty">Bin is empty. Deleted recordings stay here for 7 days, then are removed permanently.</div>
   `, { title: 'Bin' });
   bindChrome(root);
   const list = $('#bin-list', root);
@@ -559,8 +562,8 @@ async function renderBin(root) {
     el.className = 'bin-row';
     el.innerHTML = `
       <div class="bin-meta">
-        <h2>${escapeHtml(item.title)}</h2>
-        <div class="sub">Deleted ${escapeHtml(formatDeletedDate(item.deletedAt))} · ${item.daysLeft} day${item.daysLeft === 1 ? '' : 's'} left · ${escapeHtml(formatBytes(item.size))}</div>
+        <h2>${escapeHtml(item.roomTitle || item.title || 'Recording')}</h2>
+        <div class="sub">${item.recordedAt ? `Recorded ${escapeHtml(formatLocalDateTime(item.recordedAt))} · ` : ''}Deleted ${escapeHtml(formatLocalDateTime(item.deletedAt))} · ${item.daysLeft} day${item.daysLeft === 1 ? '' : 's'} left · ${escapeHtml(formatBytes(item.size))}</div>
       </div>
       <div class="bin-actions">
         <button type="button" class="btn btn-primary" data-restore>Restore</button>
@@ -588,8 +591,8 @@ async function renderPublicShare(root, token) {
       <div class="player-wrap public-player">
         <video controls playsinline preload="metadata" src="${escapeHtml(data.streamUrl)}"></video>
         <div class="player-meta">
-          <h1>${escapeHtml(data.title)}</h1>
-          <div class="sub">${escapeHtml(data.roomTitle)} · ${formatBytes(data.size)}</div>
+          <h1>${escapeHtml(data.roomTitle || data.title)}</h1>
+          <div class="sub">${escapeHtml(formatLocalDateTime(data.recordedAt) || data.roomTitle || '')}${data.recordedAt ? ' · ' : ''}${formatBytes(data.size)}</div>
           <div class="sub">Link expires ${escapeHtml(formatExpiry(data.expiresAt))}</div>
           <div class="player-actions">
             ${

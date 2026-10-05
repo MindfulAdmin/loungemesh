@@ -741,3 +741,24 @@ a.btn.btn-primary:visited {
     width: 100%;
   }
 }
+
+/* time/title polish */
+.card h2, .bin-meta h2, .player-meta h1 {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+.empty {
+  text-align: center;
+  padding: 28px 16px;
+  color: var(--muted);
+  line-height: 1.45;
+}
+.modal {
+  background: var(--bg-elevated);
+  color: var(--text);
+}
+
+.btn.is-active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}

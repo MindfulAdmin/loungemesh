@@ -82,15 +82,17 @@ function audit(action, details = {}, req = null) {
 }
 
 function titleCaseRoom(slug) {
-  return (
-    decodeURIComponent(slug)
-      .replace(/[-_]+/g, ' ')
-      .trim()
-      .split(/\s+/)
-      .filter(Boolean)
-      .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-      .join(' ') || 'Recording'
-  );
+  let s = decodeURIComponent(slug || '')
+    .replace(/[-_]+/g, ' ')
+    .trim()
+    .toLowerCase();
+  // guyandmani → guy and mani
+  s = s.replace(/([a-z])and([a-z])/g, '$1 and $2');
+  const words = s.split(/\s+/).filter(Boolean);
+  if (!words.length) return 'Recording';
+  return words
+    .map((w, i) => (w === 'and' && i > 0 ? 'and' : w.charAt(0).toUpperCase() + w.slice(1)))
+    .join(' ');
 }
 
 function roomFromMetadata(meta) {
@@ -117,8 +119,9 @@ function formatDisplayDate(date) {
 }
 
 function formatFileStamp(date) {
+  // UTC — matches Jibri filename stamps and finalize (date -u).
   const parts = new Intl.DateTimeFormat('en-GB', {
-    timeZone: TZ,
+    timeZone: 'UTC',
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
@@ -185,7 +188,8 @@ function listRecordings() {
       const roomSlug = roomFromMetadata(meta);
       const roomTitle = titleCaseRoom(roomSlug);
       const recordedAt = parseStampFromFilename(file) || st.mtime;
-      const title = `${roomTitle} · ${formatDisplayDate(recordedAt)}`;
+      // Title is room only; clients format recordedAt in the viewer's local timezone.
+      const title = roomTitle;
       const downloadName = sanitizeFilename(roomTitle, recordedAt);
       const id = `${entry.name}/${file}`;
       items.push({
@@ -377,9 +381,10 @@ function listBin(nowMs = Date.now()) {
       id: meta.id || `${entry.name}/${meta.filename || ''}`,
       folder: meta.folder || entry.name,
       filename: meta.filename || null,
-      title: meta.title || entry.name,
-      roomTitle: meta.roomTitle || '',
+      title: meta.title || meta.roomTitle || entry.name,
+      roomTitle: meta.roomTitle || meta.title || '',
       size: meta.size || 0,
+      recordedAt: meta.recordedAt || null,
       deletedAt,
       daysLeft: left,
       expiresAt: new Date(new Date(deletedAt).getTime() + TRASH_TTL_MS).toISOString(),
@@ -446,6 +451,7 @@ async function softDeleteRecording(id, req) {
     title: recording.title,
     roomTitle: recording.roomTitle,
     size: recording.size,
+    recordedAt: recording.recordedAt,
     deletedAt: new Date().toISOString(),
     meetingUrl: recording.meetingUrl,
   };
@@ -739,6 +745,7 @@ router.get('/api/share/:token', (req, res) => {
   const payload = {
     title: recording.title,
     roomTitle: recording.roomTitle,
+    recordedAt: recording.recordedAt,
     size: recording.size,
     streamUrl: `${BASE}/api/share/${share.token}/raw`,
     expiresAt: share.expiresAt,
