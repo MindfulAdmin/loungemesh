@@ -158,6 +158,12 @@ function shell(content, { title, publicMode } = {}) {
           </div>
         </div>
         <div class="top-actions">
+          ${
+            publicMode
+              ? ''
+              : `<a class="btn btn-ghost" href="#/bin" id="bin-nav">Bin</a>
+          <a class="btn btn-ghost" href="#/" id="lib-nav">Library</a>`
+          }
           <button type="button" class="icon-btn" id="theme-btn" title="Toggle theme">${themeLabel()}</button>
           ${publicMode ? '' : '<button type="button" class="btn btn-ghost" id="logout-btn">Log out</button>'}
         </div>
@@ -217,12 +223,58 @@ async function renderLibrary(root) {
       const el = document.createElement('article');
       el.className = 'card';
       el.innerHTML = `
-        <span class="badge">Video</span>
+        <div class="card-top">
+          <span class="badge">Video</span>
+          <div class="card-menu-wrap">
+            <button type="button" class="icon-btn card-menu-btn" aria-label="More actions" data-menu>⋯</button>
+            <div class="card-menu hidden" role="menu">
+              <button type="button" role="menuitem" data-open>Open</button>
+              <button type="button" role="menuitem" class="danger" data-delete>Delete</button>
+            </div>
+          </div>
+        </div>
         <h2>${escapeHtml(item.title)}</h2>
         <div class="sub">${escapeHtml(item.roomTitle)} · ${formatBytes(item.size)}</div>
       `;
-      el.addEventListener('click', () => {
+      const open = () => {
         location.hash = `#/watch/${encodeURIComponent(item.id)}`;
+      };
+      el.addEventListener('click', (e) => {
+        if (e.target.closest('[data-menu], .card-menu')) return;
+        open();
+      });
+      el.querySelector('[data-menu]')?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        document.querySelectorAll('.card-menu').forEach((m) => {
+          if (m !== el.querySelector('.card-menu')) m.classList.add('hidden');
+        });
+        el.querySelector('.card-menu')?.classList.toggle('hidden');
+      });
+      el.querySelector('[data-open]')?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        open();
+      });
+      el.querySelector('[data-delete]')?.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        el.querySelector('.card-menu')?.classList.add('hidden');
+        const ok = await confirmDelete(item);
+        if (!ok) return;
+        try {
+          await deleteRecording(item);
+          const data = await api('/api/recordings');
+          items.splice(0, items.length, ...(data.items || []));
+          paint(items.filter((i) => {
+            const q = ($('#q', root)?.value || '').trim().toLowerCase();
+            if (!q) return true;
+            return (
+              i.title.toLowerCase().includes(q) ||
+              i.roomTitle.toLowerCase().includes(q) ||
+              (i.room || '').toLowerCase().includes(q)
+            );
+          }));
+        } catch (err) {
+          alert(err.message === 'jibri_busy' ? 'Cannot delete while recording is in progress.' : err.message || 'Delete failed');
+        }
       });
       grid.appendChild(el);
     }
@@ -403,6 +455,7 @@ async function renderPlayer(root, id) {
         <div class="player-actions">
           <a class="btn" href="${item.downloadUrl}" download>Download</a>
           <button type="button" class="btn" id="share-btn">Share</button>
+          <button type="button" class="btn btn-danger" id="delete-btn">Delete</button>
         </div>
       </div>
     </div>
@@ -417,6 +470,113 @@ async function renderPlayer(root, id) {
     openSharePanel(root, item);
     $('#share-panel', root)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   });
+  $('#delete-btn', root).addEventListener('click', async () => {
+    const ok = await confirmDelete(item);
+    if (!ok) return;
+    try {
+      await deleteRecording(item);
+      location.hash = '#/bin';
+      await route();
+    } catch (err) {
+      alert(err.message === 'jibri_busy' ? 'Cannot delete while recording is in progress.' : err.message || 'Delete failed');
+    }
+  });
+}
+
+
+function formatDeletedDate(iso) {
+  try {
+    return new Intl.DateTimeFormat('en-GB', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    }).format(new Date(iso));
+  } catch {
+    return iso || '';
+  }
+}
+
+function confirmDelete(item) {
+  return new Promise((resolve) => {
+    const existing = document.getElementById('mr-confirm');
+    if (existing) existing.remove();
+    const overlay = document.createElement('div');
+    overlay.id = 'mr-confirm';
+    overlay.className = 'modal-overlay';
+    overlay.innerHTML = `
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="mr-confirm-title">
+        <h2 id="mr-confirm-title">Delete recording?</h2>
+        <p>This will move the recording to the Bin for <strong>7 days</strong>. Share links will stop working immediately.</p>
+        <dl class="confirm-meta">
+          <div><dt>Room</dt><dd>${escapeHtml(item.roomTitle || item.room || '')}</dd></div>
+          <div><dt>Date</dt><dd>${escapeHtml(formatDeletedDate(item.recordedAt))}</dd></div>
+          <div><dt>Size</dt><dd>${escapeHtml(formatBytes(item.size))}</dd></div>
+        </dl>
+        <div class="modal-actions">
+          <button type="button" class="btn" data-cancel>Cancel</button>
+          <button type="button" class="btn btn-danger" data-confirm>Delete</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    const done = (v) => {
+      overlay.remove();
+      resolve(v);
+    };
+    overlay.querySelector('[data-cancel]').addEventListener('click', () => done(false));
+    overlay.querySelector('[data-confirm]').addEventListener('click', () => done(true));
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) done(false);
+    });
+  });
+}
+
+async function deleteRecording(item) {
+  const slash = item.id.indexOf('/');
+  const folder = encodeURIComponent(item.folder || item.id.slice(0, slash));
+  const file = encodeURIComponent(item.filename || item.id.slice(slash + 1));
+  return api(`/api/recordings/${folder}/${file}`, { method: 'DELETE' });
+}
+
+async function renderBin(root) {
+  const data = await api('/api/bin');
+  const items = data.items || [];
+  const ttl = data.ttlDays || 7;
+  root.innerHTML = shell(`
+    <div class="toolbar">
+      <div class="meta-count">${items.length} in Bin · auto-purge after ${ttl} days</div>
+    </div>
+    <div class="bin-list" id="bin-list"></div>
+    <div class="empty ${items.length ? 'hidden' : ''}" id="bin-empty">Bin is empty.</div>
+  `, { title: 'Bin' });
+  bindChrome(root);
+  const list = $('#bin-list', root);
+  for (const item of items) {
+    const el = document.createElement('article');
+    el.className = 'bin-row';
+    el.innerHTML = `
+      <div class="bin-meta">
+        <h2>${escapeHtml(item.title)}</h2>
+        <div class="sub">Deleted ${escapeHtml(formatDeletedDate(item.deletedAt))} · ${item.daysLeft} day${item.daysLeft === 1 ? '' : 's'} left · ${escapeHtml(formatBytes(item.size))}</div>
+      </div>
+      <div class="bin-actions">
+        <button type="button" class="btn btn-primary" data-restore>Restore</button>
+      </div>
+    `;
+    el.querySelector('[data-restore]').addEventListener('click', async () => {
+      try {
+        await api(`/api/bin/${encodeURIComponent(item.trashId)}/restore`, { method: 'POST', body: '{}' });
+        location.hash = '#/';
+        await route();
+      } catch (err) {
+        alert(err.message || 'Restore failed');
+      }
+    });
+    list.appendChild(el);
+  }
 }
 
 async function renderPublicShare(root, token) {
@@ -480,6 +640,10 @@ async function route() {
       await renderPlayer(root, id);
       return;
     }
+    if (hash.startsWith('#/bin')) {
+      await renderBin(root);
+      return;
+    }
     await renderLibrary(root);
   } catch (e) {
     if (e.status === 401) {
@@ -498,3 +662,9 @@ window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () 
   if ((document.documentElement.dataset.theme || 'auto') === 'auto') syncLogos();
 });
 route();
+
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('.card-menu-wrap')) {
+    document.querySelectorAll('.card-menu').forEach((m) => m.classList.add('hidden'));
+  }
+});

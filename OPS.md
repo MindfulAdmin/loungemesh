@@ -99,11 +99,23 @@ Rebuild after rotating: `docker compose build loungemesh && docker compose up -d
 
 - **Primary:** https://office.mindfuldesign.me/recordings/
 - Alias: https://recordings.mindfuldesign.me → redirects to primary
-- App: custom Mindful Recordings (Express) via `docker-compose.recordings.yml` — not File Browser
-- Login: username `admin` — password in `branding/.recordings-password` (+ 1Password)
+- App: custom Mindful Recordings (Express) via `recordings-app/docker-compose.recordings.yml` — not File Browser
+- Login: username `admin` — password in `branding/.recordings-password` (+ 1Password). Single admin role; no per-user ownership.
+- Data: `/opt/loungemesh/docker/jitsi-config/storage/jibri/recordings/` (mounted at `/data`)
 - Titles: room name + date/time from Jibri `metadata.json` (Europe/London)
 - Finalize rename: `docker/jitsi-config/jibri/finalize_recording.sh` + `JIBRI_FINALIZE_RECORDING_SCRIPT_PATH`
 - Font: Lato (shared with office/meet branding)
+
+### Delete / Bin (7-day soft delete)
+
+- **Delete** (watch page or card ⋯ menu) soft-moves the session folder to `/data/.trash/` (same disk). Confirm dialog shows room, date, size.
+- **Bin** (`#/bin`): list deleted items with **Restore** and days remaining. Auto-purge after **7 days** (hourly + on Bin load). Admin can force purge clock via `POST /recordings/api/bin/purge` with `{ "now": "<iso>" }` for tests.
+- Share links for a deleted recording are revoked immediately (removed from `.shares.json`).
+- Audit log: `/data/.audit.log` (JSON lines: delete / restore / purge). Mode 600.
+- Deletes are refused with `409 jibri_busy` while Jibri is recording that session (health check via `JIBRI_HEALTH_URL`).
+- Path safety: basename-only folder/file; never touch paths outside `/data`; `.trash` not served as library media.
+- Manual SSH delete still works: `rm -rf …/storage/jibri/recordings/<uuid>/` (bypasses Bin). Prefer the UI.
+- Redeploy: `cd /opt/loungemesh && docker tag mindfulmeet-recordings:1.0.0 mindfulmeet-recordings:pre-delete-$(date +%Y%m%d) && docker compose --env-file .env -f recordings-app/docker-compose.recordings.yml build recordings-ui && docker compose --env-file .env -f recordings-app/docker-compose.recordings.yml up -d recordings-ui`
 
 ## Meet branding CSS (do not break)
 

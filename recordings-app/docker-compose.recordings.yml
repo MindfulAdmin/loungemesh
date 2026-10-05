@@ -19,13 +19,20 @@ services:
       PASSWORD_FILE: /run/secrets/recordings-password
       LOGO_FILE: /branding/mindful-logo-dark.png
       FAVICON_FILE: /branding/mindful-favicon.png
-      # Required — app exits if unset or a known default.
       SESSION_SECRET: ${RECORDINGS_SESSION_SECRET}
+      JIBRI_HEALTH_URL: http://jibri:2222/jibri/api/v1.0/health
+      TRASH_TTL_MS: "604800000"
     volumes:
       - ../docker/jitsi-config/storage/jibri/recordings:/data
-      # RW so successful login can upgrade plaintext → bcrypt hash in place.
       - ../branding/.recordings-password:/run/secrets/recordings-password
       - ../branding/mindful-logo-dark.png:/branding/mindful-logo-dark.png:ro
       - ../branding/mindful-logo-white.png:/branding/mindful-logo-white.png:ro
       - ../branding/mindful-favicon.png:/branding/mindful-favicon.png:ro
       - ./public:/app/public:ro
+    networks:
+      - default
+      - jitsi
+networks:
+  jitsi:
+    external: true
+    name: loungemesh_meet.jitsi
