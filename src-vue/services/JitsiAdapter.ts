@@ -162,7 +162,13 @@ export class JitsiAdapter implements MediaService {
       this.emit('disconnected');
     });
 
-    connection.connect();
+    const xmppUser = (import.meta.env.VITE_JITSI_XMPP_USER as string | undefined)?.trim?.();
+    const xmppPassword = (import.meta.env.VITE_JITSI_XMPP_PASSWORD as string | undefined)?.trim?.();
+    if (xmppUser && xmppPassword) {
+      connection.connect({ id: xmppUser, password: xmppPassword });
+    } else {
+      connection.connect();
+    }
     this.connection = connection;
   }
 
@@ -237,6 +243,21 @@ export class JitsiAdapter implements MediaService {
       this.conference = undefined;
       this.joined = false;
     });
+    // The bridge connection can drop without the conference failing. Without
+    // these the SPA keeps rendering dead tracks until the user reloads, which is
+    // the main reason Office feels less reliable than classic Jitsi on flaky links.
+    if (ev.CONNECTION_INTERRUPTED) {
+      conference.on(ev.CONNECTION_INTERRUPTED, () => {
+        mediaDebug('JitsiAdapter', 'CONNECTION_INTERRUPTED', {});
+        this.emit('connectionInterrupted');
+      });
+    }
+    if (ev.CONNECTION_RESTORED) {
+      conference.on(ev.CONNECTION_RESTORED, () => {
+        mediaDebug('JitsiAdapter', 'CONNECTION_RESTORED', {});
+        this.emit('connectionRestored');
+      });
+    }
     conference.on(ev.TRACK_ADDED, (track: unknown) => {
       const t = track as JitsiTrack;
       mediaDebugTrack('JitsiAdapter', 'TRACK_ADDED', t);
@@ -296,6 +317,7 @@ export class JitsiAdapter implements MediaService {
       'lobby',
       'react',
       'hand',
+      'megaphone',
       'poll',
       'notes',
       'room',
@@ -330,10 +352,16 @@ export class JitsiAdapter implements MediaService {
     this.addedLocalTracks.clear();
   }
 
-  async createLocalTracks(devices: ('audio' | 'video' | 'desktop')[]): Promise<JitsiTrack[]> {
+  async createLocalTracks(
+    devices: ('audio' | 'video' | 'desktop')[],
+    deviceIds?: { audioDeviceId?: string; videoDeviceId?: string },
+  ): Promise<JitsiTrack[]> {
     this.init();
     const options = { firePermissionPromptIsShownEvent: true };
     if (devices.includes('desktop')) {
+      // Do not set desktopSharingFrameRate. max > 5 tells Chrome to prefer fps
+      // over resolution and turns on screenshare simulcast, so JVB forwards a
+      // low layer (jitsi-meet#15611 / #14884). Unset = sharp share at ~5 fps.
       return this.jsMeet!.createLocalTracks({
         devices: ['desktop'],
         desktopSharingSources: ['screen', 'window', 'tab'],
@@ -341,20 +369,27 @@ export class JitsiAdapter implements MediaService {
       } as any);
     }
     const av = devices.filter((d): d is 'audio' | 'video' => d === 'audio' || d === 'video');
-    const trackOptions: any = {
+    const trackOptions: Record<string, unknown> = {
       devices: av.length ? av : ['video'],
       ...options,
     };
+    if (deviceIds?.audioDeviceId) trackOptions.micDeviceId = deviceIds.audioDeviceId;
+    if (deviceIds?.videoDeviceId) trackOptions.cameraDeviceId = deviceIds.videoDeviceId;
+    const constraints: Record<string, unknown> = {};
     if (devices.includes('audio')) {
-      trackOptions.constraints = {
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-        }
+      const audio: Record<string, unknown> = {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
       };
+      if (deviceIds?.audioDeviceId) audio.deviceId = { exact: deviceIds.audioDeviceId };
+      constraints.audio = audio;
     }
-    return this.jsMeet!.createLocalTracks(trackOptions);
+    if (deviceIds?.videoDeviceId) {
+      constraints.video = { deviceId: { exact: deviceIds.videoDeviceId } };
+    }
+    if (Object.keys(constraints).length) trackOptions.constraints = constraints;
+    return this.jsMeet!.createLocalTracks(trackOptions as Parameters<JitsiMeetJS['createLocalTracks']>[0]);
   }
 
   async addLocalTrack(track: JitsiTrack): Promise<void> {
@@ -493,7 +528,7 @@ export class JitsiAdapter implements MediaService {
   sendCommand(name: string, value: string): void {
     if (!this.conference) return;
     this.conference.sendCommand(name, { value: encodeXmppCommandValue(value) });
-    if (name === 'stage' || name === 'react' || name === 'mod' || name === 'hand') {
+    if (name === 'stage' || name === 'react' || name === 'mod' || name === 'hand' || name === 'megaphone') {
       try {
         this.conference.removeCommand(name);
       } catch (e) {

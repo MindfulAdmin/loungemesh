@@ -13,6 +13,8 @@ import AppHeader from '@/components/layout/AppHeader.vue';
 import ErrorHandler from '@/components/common/ErrorHandler.vue';
 import { defineAsyncComponent } from 'vue';
 import ScreenshareButton from '@/components/footer/ScreenshareButton.vue';
+import DeviceSettingsButton from '@/components/footer/DeviceSettingsButton.vue';
+import SphereGridOverlay from '@/components/room/SphereGridOverlay.vue';
 import SharedScreens from '@/components/screenshare/SharedScreens.vue';
 import { demoteFromStage, applyStagePromote, broadcastStageLayout } from '@/utils/sessionStage';
 import { getMediaEngineInstance } from '@/services/mediaEngineSingleton';
@@ -26,6 +28,7 @@ const SessionFeaturePanels = defineAsyncComponent(
   () => import('@/components/session/SessionFeaturePanels.vue'),
 );
 const LobbyOverlay = defineAsyncComponent(() => import('@/components/session/LobbyOverlay.vue'));
+import ReconnectingBanner from '@/components/session/ReconnectingBanner.vue';
 const WhiteboardOverlay = defineAsyncComponent(
   () => import('@/components/session/WhiteboardOverlay.vue'),
 );
@@ -183,12 +186,14 @@ onBeforeUnmount(() => {
   <JitsiConnection />
   <LocalStoreLogic />
   <LobbyOverlay />
+  <ReconnectingBanner />
   <PanWrapper :event-identifier="identifier">
     <Room :identifier="identifier">
       <RemoteUsers />
       <LocalUser />
     </Room>
   </PanWrapper>
+  <SphereGridOverlay v-if="features.gridView" />
   <SharedScreens v-if="!features.isStageModeActive" />
   <SessionFeaturePanels />
   <WhiteboardOverlay
@@ -300,6 +305,7 @@ onBeforeUnmount(() => {
         <AppIcon :name="local.mute ? 'mic-off' : 'mic'" />
       </template>
     </IconButton>
+    <DeviceSettingsButton />
     <ScreenshareButton />
     <IconButton
       v-if="features.stageInvitationPending || features.isLocalStageOccupant"

@@ -21,7 +21,9 @@ const guestReason = ref('');
 const errorMsg = ref('');
 
 // Auth form fields
-const activeTab = ref<'guest' | 'login' | 'signup'>('guest');
+const activeTab = ref<'guest' | 'login' | 'signup'>(
+  features.needsAuthToStart ? 'login' : 'guest',
+);
 const authEmail = ref('');
 const authPassword = ref('');
 const authName = ref('');
@@ -63,6 +65,9 @@ async function handleAuthSubmit() {
     } else {
       await auth.signup(authEmail.value, authPassword.value, authName.value);
     }
+    if (features.needsAuthToStart && auth.isAuthenticated) {
+      features.syncOrClaimHostOnLoaded(engine);
+    }
   } catch (err: any) {
     authError.value = err.message || 'Authentication failed. Please try again.';
   } finally {
@@ -92,6 +97,57 @@ async function exitLobby() {
         <p class="sub textError">
           Your request to join this meeting was declined by the host.
         </p>
+        <button type="button" class="btnExit" @click="exitLobby">
+          Exit to Homepage
+        </button>
+      </template>
+
+      <!-- Sign in required to start an empty room -->
+      <template v-else-if="features.needsAuthToStart">
+        <div class="iconCircle">
+          &#128274;
+        </div>
+        <h2 class="title">Sign in to start</h2>
+        <p class="sub">
+          This room has not been started yet. Only a signed-in host can create a new Office session.
+          Guests need an invite to a meeting that already exists.
+        </p>
+        <div class="tabs">
+          <button
+            type="button"
+            class="tab"
+            :class="{ active: activeTab === 'login' }"
+            @click="activeTab = 'login'"
+          >
+            Sign In
+          </button>
+          <button
+            type="button"
+            class="tab"
+            :class="{ active: activeTab === 'signup' }"
+            @click="activeTab = 'signup'"
+          >
+            Register
+          </button>
+        </div>
+        <form class="form" @submit.prevent="handleAuthSubmit">
+          <p v-if="authError" class="errorAlert" role="alert">{{ authError }}</p>
+          <div v-if="activeTab === 'signup'" class="inputGroup">
+            <label for="startAuthName">Display Name *</label>
+            <input id="startAuthName" v-model="authName" type="text" required autocomplete="name" />
+          </div>
+          <div class="inputGroup">
+            <label for="startAuthEmail">Email *</label>
+            <input id="startAuthEmail" v-model="authEmail" type="email" required autocomplete="username" />
+          </div>
+          <div class="inputGroup">
+            <label for="startAuthPassword">Password *</label>
+            <input id="startAuthPassword" v-model="authPassword" type="password" required autocomplete="current-password" />
+          </div>
+          <button type="submit" class="btnPrimary" :disabled="authLoading">
+            {{ authLoading ? 'Please wait…' : (activeTab === 'signup' ? 'Create account' : 'Sign in') }}
+          </button>
+        </form>
         <button type="button" class="btnExit" @click="exitLobby">
           Exit to Homepage
         </button>

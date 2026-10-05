@@ -16,6 +16,7 @@ import { emitMediaStateSnapshot } from '@/utils/mediaStateSnapshot';
 import { normalizeSessionError } from '@/services/sessionErrorCodes';
 import { unlockMediaPlaybackNow } from '@/utils/resumeMediaPlayback';
 import { applyParticipantHandRaised, parseHandRaised } from '@/utils/sessionHandRaise';
+import { applyParticipantMegaphone, parseMegaphone } from '@/utils/sessionMegaphone';
 import { broadcastHostRoomSettings } from '@/utils/hostRoomSettings';
 import { broadcastSharedNotes } from '@/utils/notesSync';
 import { isOnStage } from '@/components/stage/isOnStage';
@@ -84,6 +85,17 @@ export function wireStoreSync(engine: MediaService): void {
       isJoining: false,
     });
   });
+  engine.on('connectionInterrupted', () => {
+    mediaDebug('wiring', 'connectionInterrupted', {});
+    conferenceStore.setConnectionInterrupted(true);
+  });
+  engine.on('connectionRestored', () => {
+    mediaDebug('wiring', 'connectionRestored', {});
+    conferenceStore.setConnectionInterrupted(false);
+    // The bridge forgets receiver constraints across the drop, so remote tiles
+    // stay black on reconnect unless we ask for the sources again.
+    scheduleReceiverRefresh();
+  });
   engine.on('userJoined', (id, user) => {
     conferenceStore.addUser(id, user);
     const props = sanitizeParticipantProperties(
@@ -91,6 +103,9 @@ export function wireStoreSync(engine: MediaService): void {
     );
     if ('handRaised' in props) {
       applyParticipantHandRaised(id, parseHandRaised(props.handRaised));
+    }
+    if ('megaphone' in props) {
+      applyParticipantMegaphone(id, parseMegaphone(props.megaphone));
     }
     const features = useSessionFeaturesStore();
     if (features.isHost) {
@@ -239,6 +254,10 @@ export function wireStoreSync(engine: MediaService): void {
     if ('handRaised' in safe) {
       applyParticipantHandRaised(id, parseHandRaised(safe.handRaised));
       delete safe.handRaised;
+    }
+    if ('megaphone' in safe) {
+      applyParticipantMegaphone(id, parseMegaphone(safe.megaphone));
+      delete safe.megaphone;
     }
     if ('onStage' in safe) {
       const features = useSessionFeaturesStore();

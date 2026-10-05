@@ -2,7 +2,6 @@
 import { onMounted, ref, computed, watch, onUnmounted } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import AppHeader from '@/components/layout/AppHeader.vue';
-import NameInputForm from '@/components/home/NameInputForm.vue';
 import ScheduleModal, { type ScheduledMeeting } from '@/components/home/ScheduleModal.vue';
 import { useConferenceStore } from '@/stores/conferenceStore';
 import { useLocalStore } from '@/stores/localStore';
@@ -142,13 +141,12 @@ async function fetchUpcoming() {
   }
 }
 
-// Handler for guest name form submit
-function goSessionGuest(payload: { displayName: string; sessionName: string }) {
-  const name = formatSphereName(payload.displayName);
-  localStorage.setItem('loungemesh_guest_name', payload.displayName);
-  conference.setDisplayName(name);
-  conference.setConferenceName(payload.sessionName);
-  router.push(`/session/${payload.sessionName}`);
+// Guest join-by-code: enter flow only (cannot invent/start a room)
+function goSessionJoinGuest(room: string) {
+  const code = room.trim();
+  if (!code) return;
+  conference.setConferenceName(code);
+  router.push(`/enter/${code}`);
 }
 
 // Handler for logged-in join
@@ -203,12 +201,17 @@ async function submitInstantMeeting() {
 
     if (response.ok) {
       goSessionAuth(roomName);
-    } else {
-      goSessionAuth(roomName);
+      return;
     }
+    if (response.status === 401) {
+      errorMsg.value = 'Sign in required to start a meeting.';
+      auth.showAuthPrompt = true;
+      return;
+    }
+    errorMsg.value = 'Could not create the meeting. Please try again.';
   } catch (err) {
     console.error('Instant meeting create failed:', err);
-    goSessionAuth(roomName);
+    errorMsg.value = 'Could not create the meeting. Please try again.';
   }
 }
 
@@ -308,8 +311,8 @@ function getUserRole(meet: ScheduledMeeting): 'host' | 'moderator' | null {
         
         <!-- Header Section (spans full width) -->
         <header class="dashboardHeader">
-          <h1 class="title">LoungeMesh</h1>
-          <p class="sub">Spatial video lounges for informal online events</p>
+          <h1 class="title">Mindful Office</h1>
+          <p class="sub">Spatial video lounges for the Mindful Design team</p>
           
           <p v-if="errorMsg" class="alert error" role="alert">{{ errorMsg }}</p>
           <p v-if="infoMsg" class="alert info" role="status">{{ infoMsg }}</p>
@@ -391,10 +394,38 @@ function getUserRole(meet: ScheduledMeeting): 'host' | 'moderator' | null {
               </div>
             </div>
 
-            <!-- Unauthenticated View: Join as guest with name input form -->
+            <!-- Unauthenticated: join invite only; sign in to start -->
             <div v-else class="guestDashboard">
-              <NameInputForm @submit="goSessionGuest" />
-              
+              <h2 class="sectionTitle">Join a meeting</h2>
+              <p class="sectionSub">Have an invite link or room code? Enter it below. Starting a new session requires signing in.</p>
+              <div class="actionCard guestJoinCard">
+                <div class="cardIcon orange">
+                  <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor">
+                    <path d="M20 5H4c-1.1 0-1.99.9-1.99 2L2 17c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm-9 12H5v-2h6v2zm0-4H5v-2h6v2zm0-4H5V7h6v2zm9 8h-6v-2h6v2zm0-4h-6v-2h6v2zm0-4h-6V7h6v2z"/>
+                  </svg>
+                </div>
+                <h3>Join Meeting</h3>
+                <p>Enter a meeting code shared by the host.</p>
+                <div class="cardInputGroup">
+                  <input
+                    v-model="joinRoomName"
+                    type="text"
+                    placeholder="Enter code"
+                    class="cardJoinInput"
+                    autocomplete="off"
+                    @keyup.enter="goSessionJoinGuest(joinRoomName)"
+                  />
+                  <button
+                    type="button"
+                    class="cardJoinBtn"
+                    :disabled="!joinRoomName.trim()"
+                    @click="goSessionJoinGuest(joinRoomName)"
+                  >
+                    Join
+                  </button>
+                </div>
+              </div>
+
               <div class="authCtaBanner">
                 <div class="ctaIcon">
                   <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
@@ -402,8 +433,8 @@ function getUserRole(meet: ScheduledMeeting): 'host' | 'moderator' | null {
                   </svg>
                 </div>
                 <div class="ctaContent">
-                  <h4>Unlock Scheduling & Custom Integrations</h4>
-                  <p>Sign in to schedule events in advance, sync directly with Google Calendar, and unlock full moderator roles.</p>
+                  <h4>Sign in to start a meeting</h4>
+                  <p>Like Mindful Meet, only signed-in hosts can start a new Office session. Guests join via invite.</p>
                   <button type="button" class="ctaLinkBtn" @click="auth.showAuthPrompt = true">
                     Sign In / Create Account &rarr;
                   </button>
@@ -1614,6 +1645,28 @@ function getUserRole(meet: ScheduledMeeting): 'host' | 'moderator' | null {
 .cardJoinBtn:disabled {
   color: #a5b4fc;
   cursor: not-allowed;
+}
+
+.guestJoinCard {
+  margin: 0 auto 8px;
+  max-width: 420px;
+  text-align: left;
+}
+
+.guestDashboard .sectionSub {
+  margin-bottom: 20px;
+}
+
+@media (max-width: 768px) {
+  .guestJoinCard {
+    max-width: 100%;
+  }
+
+  .guestDashboard .cardJoinInput,
+  .guestDashboard .cardJoinBtn {
+    font-size: 16px;
+    min-height: 44px;
+  }
 }
 
 /* Guest Auth CTA Banner */

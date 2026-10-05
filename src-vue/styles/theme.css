@@ -1,7 +1,13 @@
+/* mindful-brand-overrides */
+:root {
+  --lm-primary: #A68E65;
+  --lm-primary-strong: #8f7752;
+  --lm-accent: #A68E65;
+}
 /* LoungeMesh theme — cool blue surfaces */
 :root {
-  --font-display: 'Space', system-ui, sans-serif;
-  --font-body: 'Space', system-ui, sans-serif;
+  --font-display: "Lato", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-body: "Lato", "Helvetica Neue", Helvetica, Arial, sans-serif;
 
   --color-mono0: #000000;
   --color-mono10: #1e2240;
@@ -14,14 +20,14 @@
   --color-mono100: #ffffff;
 
   --color-orange100: #e27022;
-  --color-blue100: #4f6ef7;
+  --color-blue100: #A68E65;
   --color-red100: #e15d4c;
   --color-red120: #f07969;
 
   --color-text-default: #1e2240;
   --color-text-light: #9ba3cc;
   --color-text-warning: #e15d4c;
-  --color-text-primary: #4f6ef7;
+  --color-text-primary: #A68E65;
 
   /* Slightly richer blue background — clearly blue at all display profiles */
   --color-bg-page: #e4eaff;
@@ -32,7 +38,7 @@
   --btn-default-bg-hover: #e4eaff;
   --btn-default-fg: #3b4068;
 
-  --btn-primary-bg: #4f6ef7;
+  --btn-primary-bg: #A68E65;
   --btn-primary-bg-hover: #e4eaff;
   --btn-primary-fg: #ffffff;
 
@@ -40,7 +46,7 @@
   --btn-warning-bg-hover: #f07969;
   --btn-warning-fg: #ffffff;
 
-  --btn-active-bg: #4f6ef7;
+  --btn-active-bg: #A68E65;
   --btn-active-fg: #ffffff;
 
   --btn-highlight-bg: #f0c14b;

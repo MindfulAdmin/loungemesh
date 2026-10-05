@@ -1,0 +1,31 @@
+name: mindfulmeet-recordings
+services:
+  recordings-ui:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: mindfulmeet-recordings:1.0.0
+    container_name: mindfulmeet-recordings-ui
+    restart: unless-stopped
+    # Root required so deletes work on Jibri-owned MP4s under /data.
+    user: "0:0"
+    ports:
+      - "127.0.0.1:8088:8088"
+    environment:
+      NODE_ENV: production
+      PORT: "8088"
+      BASE_PATH: /recordings
+      DATA_DIR: /data
+      PASSWORD_FILE: /run/secrets/recordings-password
+      LOGO_FILE: /branding/mindful-logo-dark.png
+      FAVICON_FILE: /branding/mindful-favicon.png
+      # Required — app exits if unset or a known default.
+      SESSION_SECRET: ${RECORDINGS_SESSION_SECRET}
+    volumes:
+      - ../docker/jitsi-config/jibri/recordings:/data
+      # RW so successful login can upgrade plaintext → bcrypt hash in place.
+      - ../branding/.recordings-password:/run/secrets/recordings-password
+      - ../branding/mindful-logo-dark.png:/branding/mindful-logo-dark.png:ro
+      - ../branding/mindful-logo-white.png:/branding/mindful-logo-white.png:ro
+      - ../branding/mindful-favicon.png:/branding/mindful-favicon.png:ro
+      - ./public:/app/public:ro

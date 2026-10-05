@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue';
-import logo from '@/assets/logo.svg';
+import logo from '@/assets/logo.png';
 import { useAuthStore } from '@/stores/authStore';
 import AuthPrompt from '@/components/auth/AuthPrompt.vue';
 import UserProfilePopover from '@/components/auth/UserProfilePopover.vue';
@@ -27,8 +27,8 @@ function handleProfileClick() {
 <template>
   <header v-if="variant === 'home'" class="hdr homeHdr">
     <a class="brandLink" href="/" rel="home">
-      <img :src="logo" alt="LoungeMesh" class="logo" width="32" height="32" />
-      <span class="brand"><slot>LoungeMesh</slot></span>
+      <img :src="logo" alt="Mindful Office" class="logo" width="32" height="32" />
+      <span class="brand"><slot>Mindful Office</slot></span>
     </a>
     
     <div class="userMenu">
@@ -44,7 +44,7 @@ function handleProfileClick() {
   
   <div v-else class="sessionBrand" aria-hidden="true">
     <img :src="logo" alt="" class="logoMark" width="40" height="40" />
-    <span class="brandWord">LoungeMesh</span>
+    <span class="brandWord">Mindful Office</span>
   </div>
 </template>
 

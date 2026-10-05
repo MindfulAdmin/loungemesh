@@ -19,7 +19,7 @@ export function useSessionExport(getSessionId: () => string) {
   }
 
   function exportNotesRtf(): void {
-    const titleText = `LoungeMesh public notes — ${safeSessionSlug(getSessionId())}`;
+    const titleText = `Mindful Office public notes — ${safeSessionSlug(getSessionId())}`;
     const rtfContent = markdownToRtf(features.sharedNotes, titleText);
     downloadBlob(new Blob([rtfContent], { type: 'application/rtf' }), exportFileName('notes-rtf', getSessionId()));
   }

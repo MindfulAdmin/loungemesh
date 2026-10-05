@@ -1,0 +1,88 @@
+name: mindfulmeet-users
+services:
+  # Narrow Docker API for users-ui (Prosody exec only). users-ui no longer mounts the host socket.
+  users-docker-proxy:
+    image: tecnativa/docker-socket-proxy:0.3.0
+    container_name: mindfulmeet-users-docker-proxy
+    restart: unless-stopped
+    environment:
+      CONTAINERS: "1"
+      EXEC: "1"
+      POST: "1"
+      # Deny everything else (explicit zeros for clarity)
+      BUILD: "0"
+      COMMIT: "0"
+      CONFIGS: "0"
+      DISTRIBUTION: "0"
+      EVENTS: "0"
+      IMAGES: "0"
+      INFO: "0"
+      NETWORKS: "0"
+      NODES: "0"
+      PLUGINS: "0"
+      SERVICES: "0"
+      SESSION: "0"
+      SWARM: "0"
+      SYSTEM: "0"
+      TASKS: "0"
+      VOLUMES: "0"
+      AUTH: "0"
+      SECRETS: "0"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - loungemesh_meet.jitsi
+
+  users-ui:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: mindfulmeet-users:1.0.0
+    container_name: mindfulmeet-users-ui
+    restart: unless-stopped
+    # Root still needed for docker CLI + chown of admins file after writes.
+    # Docker API is only reachable via users-docker-proxy (not the raw host socket).
+    user: "0:0"
+    depends_on:
+      - users-docker-proxy
+    ports:
+      - "127.0.0.1:8089:8089"
+    environment:
+      NODE_ENV: production
+      PORT: "8089"
+      BASE_PATH: /users
+      ADMINS_FILE: /branding/users-admins.json
+      BOOTSTRAP_PASSWORD_FILE: /run/secrets/users-admin-password
+      BOOTSTRAP_ADMIN_EMAIL: matt@mindfuldesign.me
+      BOOTSTRAP_ADMIN_NAME: Matt
+      PGHOST: postgres
+      PGPORT: "5432"
+      PGUSER: loungemesh
+      PGDATABASE: loungemesh
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      PROSODY_CONTAINER: loungemesh-prosody-1
+      PROSODY_DOMAIN: meet.jitsi
+      PROSODY_CONFIG: /config/prosody.cfg.lua
+      # Talk to allowlisted proxy instead of host docker.sock
+      DOCKER_HOST: tcp://users-docker-proxy:2375
+      # Required — app exits if unset or a known default.
+      SESSION_SECRET: ${USERS_SESSION_SECRET}
+      # Host deploy uid/gid so users-admins.json stays backup-readable after writes.
+      FILE_OWNER_UID: "1000"
+      FILE_OWNER_GID: "1000"
+      LOGO_DARK: /branding/mindful-logo-dark.png
+      LOGO_WHITE: /branding/mindful-logo-white.png
+      FAVICON_FILE: /branding/mindful-favicon.png
+    volumes:
+      - ../branding/.users-admin-password:/run/secrets/users-admin-password:ro
+      - ../branding/users-admins.json:/branding/users-admins.json
+      - ../branding/mindful-logo-dark.png:/branding/mindful-logo-dark.png:ro
+      - ../branding/mindful-logo-white.png:/branding/mindful-logo-white.png:ro
+      - ../branding/mindful-favicon.png:/branding/mindful-favicon.png:ro
+      - ./public:/app/public:ro
+    networks:
+      - loungemesh_meet.jitsi
+
+networks:
+  loungemesh_meet.jitsi:
+    external: true

@@ -973,7 +973,9 @@ export async function getBackgroundState(req: Request, res: Response) {
       include: { configs: true },
     });
     const gridBackgroundUrl = meeting?.configs?.gridBackgroundUrl || '';
-    await redisClient.setEx(cacheKey, 86400, gridBackgroundUrl);
+    if (gridBackgroundUrl) {
+      await redisClient.set(cacheKey, gridBackgroundUrl);
+    }
     return res.json({ gridBackgroundUrl });
   } catch (err) {
     console.error('Get background state error:', err);
@@ -989,7 +991,11 @@ export async function updateBackgroundState(req: Request, res: Response) {
   }
   const cacheKey = `meeting:state:${roomName}:background`;
   try {
-    await redisClient.setEx(cacheKey, 86400, gridBackgroundUrl);
+    if (gridBackgroundUrl) {
+      await redisClient.set(cacheKey, gridBackgroundUrl);
+    } else {
+      await redisClient.del(cacheKey);
+    }
     const meeting = await prisma.meeting.findUnique({ where: { roomName } });
     if (meeting) {
       await prisma.meetingConfig.upsert({

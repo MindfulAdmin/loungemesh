@@ -145,14 +145,26 @@ describe('sessionFeaturesStore', () => {
     expect(features.whiteboardStrokes).toEqual([]);
   });
 
-  it('treats first joiner as host before host id is assigned', () => {
+  it('treats signed-in first joiner as host before host id is assigned', () => {
     const features = useSessionFeaturesStore();
     const local = useLocalStore();
+    const auth = useAuthStore();
     local.setMyID('first');
+    auth.isAuthenticated = true;
     features.resetHostForJoin();
     expect(features.isHost).toBe(true);
     expect(features.canUseNotes).toBe(true);
     expect(features.canUseWhiteboard).toBe(true);
+  });
+
+  it('does not treat anonymous first joiner as host', () => {
+    const features = useSessionFeaturesStore();
+    const local = useLocalStore();
+    const auth = useAuthStore();
+    local.setMyID('anon');
+    auth.isAuthenticated = false;
+    features.resetHostForJoin();
+    expect(features.isHost).toBe(false);
   });
 
   it('claims host on join after resetHostForJoin', () => {
@@ -561,16 +573,22 @@ describe('sessionFeaturesStore', () => {
   it('respects meetingExists for host checks', () => {
     const features = useSessionFeaturesStore();
     const local = useLocalStore();
+    const auth = useAuthStore();
     local.setMyID('my-id');
-    
-    // Default meetingExists: false
+    auth.isAuthenticated = false;
+
+    // Empty room + anonymous: cannot claim host
     features.meetingExists = false;
     features.hostId = '';
-    expect(features.isHost).toBe(true); // Ad-hoc fallback
-    
+    expect(features.isHost).toBe(false);
+
+    // Empty room + signed in: can claim host
+    auth.isAuthenticated = true;
+    expect(features.isHost).toBe(true);
+
     features.hostId = 'my-id';
     expect(features.isHost).toBe(true);
-    
+
     features.hostId = 'other-id';
     expect(features.isHost).toBe(false);
 
@@ -578,10 +596,10 @@ describe('sessionFeaturesStore', () => {
     features.meetingExists = true;
     features.hostId = '';
     expect(features.isHost).toBe(false); // Guest cannot steal host
-    
+
     features.hostId = 'my-id';
     expect(features.isHost).toBe(true);
-    
+
     features.hostId = 'other-id';
     expect(features.isHost).toBe(false);
   });

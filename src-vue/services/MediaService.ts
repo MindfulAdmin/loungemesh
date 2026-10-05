@@ -20,6 +20,8 @@ export type MediaServiceEvent =
   | 'connectionFailed'
   | 'conferenceJoined'
   | 'conferenceError'
+  | 'connectionInterrupted'
+  | 'connectionRestored'
   | 'userJoined'
   | 'userLeft'
   | 'trackAdded'
@@ -38,6 +40,10 @@ export type MediaServiceEventMap = {
   connectionFailed: [detail: string];
   conferenceJoined: [];
   conferenceError: [detail: string];
+  /** Bridge connection dropped; media is stalled but the conference is alive. */
+  connectionInterrupted: [];
+  /** Bridge connection came back; receiver constraints must be re-sent. */
+  connectionRestored: [];
   userJoined: [id: string, user: unknown];
   userLeft: [id: string];
   trackAdded: [track: JitsiTrack];
@@ -58,7 +64,10 @@ export interface MediaService {
   disconnect(): void;
   joinRoom(room: string, displayName: string, conferenceOptions: Record<string, unknown>): Promise<void>;
   leaveRoom(): void;
-  createLocalTracks(devices: ('audio' | 'video' | 'desktop')[]): Promise<MediaTrackHandle[]>;
+  createLocalTracks(
+    devices: ('audio' | 'video' | 'desktop')[],
+    deviceIds?: { audioDeviceId?: string; videoDeviceId?: string },
+  ): Promise<MediaTrackHandle[]>;
   addLocalTrack(track: MediaTrackHandle): Promise<void>;
   removeLocalTrack?(track: MediaTrackHandle): Promise<void>;
   replaceLocalTrack(oldTrack: MediaTrackHandle, newTrack: MediaTrackHandle): Promise<void>;

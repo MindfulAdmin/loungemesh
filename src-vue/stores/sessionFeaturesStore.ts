@@ -69,6 +69,8 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
     localLobbyPending: false,
     lobbyRejected: false,
     handRaised: false,
+    megaphone: false,
+    gridView: false,
     userReactions: {} as Record<string, UserReaction>,
     activePoll: null as ActivePoll | null,
     myPollVote: '',
@@ -102,6 +104,8 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
     meetingExists: false,
     configLoaded: false,
     isFetchingConfig: false,
+    /** Anonymous user opened a room that was never created by a host. */
+    needsAuthToStart: false,
   }),
   getters: {
     hasUnreadNotes(): boolean {
@@ -123,7 +127,11 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
       if (this.meetingExists) {
         return this.hostId === local.id;
       }
-      if (!this.hostId) return true;
+      // Empty/ad-hoc room: only a signed-in user (or verified host) may claim host.
+      if (!this.hostId) {
+        const auth = useAuthStore();
+        return auth.isAuthenticated;
+      }
       return this.hostId === local.id;
     },
     isModerator(): boolean {
@@ -172,6 +180,7 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
       return this.isHost || this.isModerator;
     },
     isLobbyBlocked(): boolean {
+      if (this.needsAuthToStart) return true;
       if (!this.lobbyEnabled) return false;
       if (this.isHost || this.isModerator) return false;
       if (this.isInvited) return false;
@@ -503,6 +512,7 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
       this.meetingExists = false;
       this.configLoaded = false;
       this.lobbyRejected = false;
+      this.needsAuthToStart = false;
     },
     setStageMessage(message: string) {
       this.stageMessage = message;
@@ -544,6 +554,7 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
       this.meetingExists = false;
       this.configLoaded = false;
       this.isFetchingConfig = false;
+      this.needsAuthToStart = false;
     },
     /* v8 ignore start */
     setVerifiedHost(verified: boolean) {
@@ -561,12 +572,16 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
     },
     syncOrClaimHostOnLoaded(engine: any) {
       const local = useLocalStore();
+      const auth = useAuthStore();
       const id = local.id;
       if (!id) return;
 
-      const isHost = this.isVerifiedHost || (!this.meetingExists && !this.hostId);
+      const canClaimEmpty =
+        auth.isAuthenticated && !this.meetingExists && !this.hostId;
+      const isHost = this.isVerifiedHost || canClaimEmpty;
 
       if (isHost) {
+        this.needsAuthToStart = false;
         this.hostId = id;
         this.pendingHostClaim = false;
 
@@ -604,7 +619,9 @@ export const useSessionFeaturesStore = defineStore('sessionFeatures', {
         broadcastHostRoomSettings(engine, this);
       } else {
         this.pendingHostClaim = false;
-        const auth = useAuthStore();
+        if (!this.meetingExists && !this.hostId && !auth.isAuthenticated) {
+          this.needsAuthToStart = true;
+        }
         if (this.lobbyEnabled && !auth.isAuthenticated && !this.lobbyApproved[id]) {
           this.localLobbyPending = false;
         }

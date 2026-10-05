@@ -21,6 +21,8 @@ services:
         VITE_DISABLE_STUN_TURN_DISCOVERY: ${VITE_DISABLE_STUN_TURN_DISCOVERY:-true}
         VITE_EVENTYAY_API_BASE: ${VITE_EVENTYAY_API_BASE-}
         VITE_SESSION_PREFIX: ${VITE_SESSION_PREFIX-}
+        VITE_JITSI_XMPP_USER: ${VITE_JITSI_XMPP_USER:-}
+        VITE_JITSI_XMPP_PASSWORD: ${VITE_JITSI_XMPP_PASSWORD:-}
     ports:
       - "127.0.0.1:${LOUNGEMESH_PORT:-8780}:80"
       - "[::1]:${LOUNGEMESH_PORT:-8780}:80"
@@ -32,6 +34,11 @@ services:
     restart: unless-stopped
     # Join the jitsi network so nginx can proxy /libs/ to the jitsi-web container
     # (lib-jitsi-meet is served from there, never bundled as a static file).
+    volumes:
+      - ./branding/mindful-favicon-office.png:/usr/share/nginx/html/favicon.png:ro
+      - ./branding/mindful-favicon-office.png:/usr/share/nginx/html/apple-touch-icon.png:ro
+      - ./branding/favicon-office.svg:/usr/share/nginx/html/favicon.svg:ro
+      - ./branding/mindful-og-office.png:/usr/share/nginx/html/mindful-logo.png:ro
     networks:
       meet.jitsi:
 
@@ -90,6 +97,22 @@ services:
       - ${CONFIG:-./docker/jitsi-config}/web:/config:Z
       - ${CONFIG:-./docker/jitsi-config}/web/crontabs:/var/spool/cron/crontabs:Z
       - ${CONFIG:-./docker/jitsi-config}/transcripts:/usr/share/jitsi-meet/transcripts:Z
+      - ./branding/mindful-logo.png:/usr/share/jitsi-meet/images/mindful-logo.png:ro
+      - ./branding/mindful-og-meet.png:/usr/share/jitsi-meet/images/mindful-og.png:ro
+      - ./branding/mindful-favicon-meet.png:/usr/share/jitsi-meet/images/mindful-favicon.png:ro
+      - ./branding/mindful-logo.png:/usr/share/jitsi-meet/images/watermark.png:ro
+      - ./branding/mindful-logo.png:/usr/share/jitsi-meet/images/rightwatermark.png:ro
+      - ./branding/mindful-favicon-meet.png:/usr/share/jitsi-meet/images/favicon.svg:ro
+      - ./branding/mindful-favicon-meet.png:/usr/share/jitsi-meet/favicon.ico:ro
+      - ./branding/mindful-favicon-meet.png:/usr/share/jitsi-meet/apple-touch-icon.png:ro
+      - ./branding/welcome-background.jpg:/usr/share/jitsi-meet/images/welcome-background.jpg:ro
+      - ./branding/title.html:/usr/share/jitsi-meet/title.html:ro
+      - ./branding/index.html:/usr/share/jitsi-meet/index.html:ro
+      - ./branding/lang/main.json:/usr/share/jitsi-meet/lang/main.json:ro
+      - ./branding/lang/main-en.json:/usr/share/jitsi-meet/lang/main-en.json:ro
+      - ./branding/all.css:/usr/share/jitsi-meet/css/all.css:ro
+      - ./branding/mindful-welcome.css:/usr/share/jitsi-meet/css/mindful-welcome.css:ro
+      - ./branding/app.bundle.min.js:/usr/share/jitsi-meet/libs/app.bundle.min.js:ro
     env_file:
       - .env
     depends_on:
@@ -147,6 +170,28 @@ services:
         condition: service_started
     networks:
       meet.jitsi:
+
+  jibri:
+    image: jitsi/jibri:stable-10888
+    restart: ${RESTART_POLICY:-unless-stopped}
+    volumes:
+      - ${CONFIG:-./docker/jitsi-config}/jibri:/config:Z
+      - ${CONFIG:-./docker/jitsi-config}/storage/jibri:/storage:Z
+    shm_size: '2gb'
+    cap_add:
+      - SYS_ADMIN
+    security_opt:
+      - seccomp:unconfined
+    environment:
+      - DISPLAY=:0
+    env_file:
+      - .env
+    depends_on:
+      jicofo:
+        condition: service_started
+    networks:
+      meet.jitsi:
+
 
 networks:
   meet.jitsi:

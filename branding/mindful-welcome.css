@@ -1,0 +1,155 @@
+@import url("https://fonts.googleapis.com/css2?family=Lato:wght@300;400;700&display=swap");
+
+/* Height chain: safe in quirks or standards mode (never collapse prejoin) */
+html,
+body,
+#react {
+  height: 100%;
+}
+#videoconference_page,
+#layout_wrapper {
+  height: 100%;
+  min-height: 100%;
+}
+
+html,
+body,
+button,
+input,
+select,
+textarea {
+  font-family: "Lato", "Helvetica Neue", Helvetica, Arial, sans-serif !important;
+}
+
+/* Mindful Meet welcome: logo top-left + spacing
+   Watermark DOM sits inside .header-container (centered), so logo uses fixed coords. */
+.welcome .header {
+  min-height: 90dvh !important;
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: center !important;
+  box-sizing: border-box !important;
+  position: relative !important;
+}
+.welcome .header .header-container {
+  margin-top: 0 !important;
+  padding: 0 1.5rem 2rem !important;
+  max-width: 720px !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+}
+
+/* Keep watermark layer from affecting center layout */
+.welcome .header .header-watermark-container,
+.welcome .welcome-watermark {
+  position: static !important;
+  width: 0 !important;
+  height: 0 !important;
+  margin: 0 !important;
+  overflow: visible !important;
+  pointer-events: none !important;
+}
+
+/* Logo: true viewport top-left, larger wordmark */
+.welcome .welcome-watermark .watermark.leftwatermark,
+.welcome .welcome-watermark a.watermark.leftwatermark {
+  position: fixed !important;
+  top: 24px !important;
+  left: 28px !important;
+  right: auto !important;
+  bottom: auto !important;
+  width: 220px !important;
+  height: 72px !important;
+  max-width: min(280px, 42vw) !important;
+  margin: 0 !important;
+  background-size: contain !important;
+  background-repeat: no-repeat !important;
+  background-position: left center !important;
+  pointer-events: auto !important;
+  display: block !important;
+  z-index: 1000 !important;
+}
+.welcome .welcome-watermark a.watermark.leftwatermark > .watermark.leftwatermark {
+  position: static !important;
+  inset: auto !important;
+  width: 100% !important;
+  height: 100% !important;
+  margin: 0 !important;
+  background-size: contain !important;
+  background-repeat: no-repeat !important;
+  background-position: left center !important;
+  display: block !important;
+}
+
+.welcome .welcome-watermark .watermark.rightwatermark {
+  display: none !important;
+}
+
+.welcome .header .header-text-title {
+  font-size: 3.25rem !important;
+  line-height: 1.15 !important;
+  margin-bottom: 0.75rem !important;
+}
+.welcome .header .header-text-subtitle {
+  margin: 0 0 2.5rem 0 !important;
+  font-weight: 500 !important;
+}
+
+/* Wider Start meeting row — use full header container */
+.welcome .header #enter_room {
+  max-width: 100% !important;
+  width: 100% !important;
+  min-width: min(560px, 100%) !important;
+  box-sizing: border-box !important;
+}
+.welcome .header #enter_room .join-meeting-container {
+  width: 100% !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+}
+.welcome .header #enter_room .enter-room-input-container {
+  flex-grow: 1 !important;
+  min-width: 0 !important;
+}
+.welcome .header #enter_room .enter-room-input-container .enter-room-input {
+  width: 100% !important;
+  font-size: 16px !important;
+}
+
+@media (max-width: 768px) {
+  .welcome .welcome-watermark .watermark.leftwatermark,
+  .welcome .welcome-watermark a.watermark.leftwatermark {
+    width: 160px !important;
+    height: 54px !important;
+    top: 16px !important;
+    left: 16px !important;
+  }
+  .welcome .header .header-text-title { font-size: 2.25rem !important; }
+  .welcome .header .header-text-subtitle { margin: 0 0 1.75rem 0 !important; }
+  .welcome .header #enter_room {
+    min-width: 0 !important;
+    width: 100% !important;
+  }
+  .welcome .header #enter_room .join-meeting-container {
+    flex-direction: column !important;
+    align-items: stretch !important;
+  }
+  .welcome .header #enter_room .enter-room-input-container {
+    padding-right: 0 !important;
+    margin-bottom: 10px !important;
+    width: 100% !important;
+  }
+  .welcome #enter_room .welcome-page-button {
+    width: 100% !important;
+  }
+}
+@media (max-width: 480px) {
+  .welcome .welcome-watermark .watermark.leftwatermark,
+  .welcome .welcome-watermark a.watermark.leftwatermark {
+    width: 140px !important;
+    height: 48px !important;
+    top: 12px !important;
+    left: 12px !important;
+  }
+  .welcome .header .header-text-title { font-size: 1.85rem !important; }
+}

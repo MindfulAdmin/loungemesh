@@ -1,0 +1,16 @@
+{
+  "admins": [
+    {
+      "email": "matt@mindfuldesign.me",
+      "displayName": "Matt",
+      "passwordHash": "$2a$10$t/.A0R4tuJo6Bf1HX2sXd.QMpKCYxCeOCJqHHHCffP9hK/QTUsEie",
+      "createdAt": "2026-07-12T00:26:17.143Z"
+    },
+    {
+      "email": "james@mindfuldesign.me",
+      "displayName": "James",
+      "passwordHash": "$2a$10$B0e.ZMavrwCDYyakyQGw6OHJn5v2EIyLwClSIZaoqOFEfzEu1vJLK",
+      "createdAt": "2026-09-08T10:45:41.117Z"
+    }
+  ]
+}
